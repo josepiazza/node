@@ -6,6 +6,7 @@
     "dev": "node src/index.js",
     "migrate:test": "dotenv -f .env.test -- npx prisma migrate deploy",
     "migrate:dev": "dotenv -f .env -- npx prisma migrate deploy",
+    "start": "node src/index.js",
     "test": "node --experimental-vm-modules --env-file=.env.test node_modules/jest/bin/jest.js --detectOpenHandles"
   },
   "dependencies": {

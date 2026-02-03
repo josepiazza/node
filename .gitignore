@@ -1,3 +1,5 @@
 node_modules
+Docker
 .env
+.env.test
 /src/generated/prisma

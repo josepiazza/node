@@ -4,7 +4,7 @@ const isTest = process.env.NODE_ENV === 'test';
 
 export const env = {
     nodeEnv: process.env.NODE_ENV,
-    port: process.env.PORT,
+    port: process.env.PORT || 8080,
     jwtSecret: process.env.JWT_SECRET,
     db: {
         host: process.env.DB_HOST,

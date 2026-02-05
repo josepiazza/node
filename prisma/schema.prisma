@@ -18,3 +18,29 @@ model User {
   email    String  @unique
   password String
 }
+
+model Persona {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  celular   String
+  whatsapp  String?
+  agendas   Agenda[]
+
+  createdAt DateTime @default(now())
+}
+
+model Agenda {
+  id         Int       @id @default(autoincrement())
+  personaId Int
+  dayOfWeek Int       // 1 = Lunes ... 7 = Domingo
+  hour      Int       // 0 - 23
+  minute    Int       // 0 - 59
+  active    Boolean   @default(true)
+
+  persona   Persona   @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+
+  @@index([personaId])
+  @@index([dayOfWeek, hour, minute])
+}

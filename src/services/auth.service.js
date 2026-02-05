@@ -23,7 +23,7 @@ export class AuthService {
         const token = jwt.sign(
             { sub: user.id },
             env.jwtSecret,
-            { expiresIn: '1h' }
+            {}
         );
 
         return { token };

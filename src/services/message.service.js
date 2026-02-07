@@ -1,6 +1,12 @@
 import { WhatsAppClient } from '../infra/http/ws.client.js';
+import { BaileysClient } from '../infra/baileys/baileys.client.js';
 import { GroqClient } from '../infra/http/groq.client.js';
 import { PersonasRepository } from '../repositories/personas.repository.js';
+import { MessageRepository } from '../repositories/message.repository.js';
+import { buildPrompTerminosYCondiciones } from '../promps/buildPrompTerminosYCondiciones.js';
+import { buildPrompRegistroUsuario } from '../promps/buildPrompRegistroUsuario.js';
+import { PersonaService } from './persona.service.js';
+import { buildPrompAgenda } from '../promps/buildPrompAgenda.js';
 import { prisma } from '../config/prisma.js';
 
 export class MessageService {
@@ -8,14 +14,21 @@ export class MessageService {
     this.whatsAppClient = new WhatsAppClient();
     this.groqClient = new GroqClient();
     this.personasRepository = new PersonasRepository();
+    this.messageRepository = new MessageRepository();
+    this.baileysClient = BaileysClient.getInstance();
+    this.personaService = new PersonaService();
   }
 
-  async sendPersonMessage({ cell, message }) {
+  async sendPersonMessage_old({ cell, message }) {
     return await this.whatsAppClient.sendTextMessage({
       phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
       to: cell,
       body: message,
     });
+  }
+
+  async sendPersonMessage({ cell, message }) {
+    return await this.baileysClient.sendMessage(cell, message);
   }
 
   async sendTemplateMessage({ cell, templateName, language }) {
@@ -27,60 +40,86 @@ export class MessageService {
     });
   }
 
-
   async processMessage(cell, message) {
-    const promp = `
-Sos un asistente personal que va a decirme que días de la semana y a que hora tengo que avisarle al usuario cuando tiene que hacer ejercicio.
-Vas a responderme solamente con un json, nada mas ya que tengo que usar la respuesta para procesarla
-Este es el formato de JSON esperado:
+    const persona = await this.personasRepository.findByCell(cell);
+    if (!persona) { return this.sendFirstPersonMessage({ cell, message }); }
 
-{
-  "cell": "$cellPhone",
-  "message": "$message",
-  "schedule": [
-    {
-      "dayOfWeek": "$diaDeLaSemana",
-      "hour": "$hora",
-      "minute": "$minute"
-    },
-    {
-      "dayOfWeek": "$diaDeLaSemana",
-      "hour": "$hora",
-      "minute": "$minute"
+    if (!persona.aceptoTyC) {
+      return this.processMessageTyC(cell, message, persona);
     }
-  ]
-}
 
-Los valores para los días de la semana son:
-0 = Lunes
-1 = Martes
-2 = Miércoles
-3 = Jueves
-4 = Viernes
-5 = Sábado
-6 = Domingo
+    if (!persona.registrado) {
+      return this.processMessageRegistro(cell, message, persona);
+    }
 
-En el valor $message vas a poner el mensaje que vamos a enviar explicando que ya se agendaron 
-los horarios para ir a entrenar, el mensaje debe ser corto, claro y no repetitivo.
+    if (persona.registrado && persona.aceptoTyC) {
+      return this.processMessageAgendarTurno(cell, message, persona);
+    }
 
-El mensaje responde a la siguiente pregunta:
-"Hola $nombreDeUsuario, ¿En que momentos te gustaría que te avisemos cuando tenes que ir a mover el cuerpo?
-Recuerda que tenes 15' para usar nuestro MicroGym para mejorar tu salud."
 
-cellPhone: ${cell}
 
-El mensaje del usuario:
-"${message}"
-        `;
+  }
+
+
+  async processMessageTyC(cell, message, persona) {
+    const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
+    const promp = buildPrompTerminosYCondiciones(mensajeEnviado.content, message);
+    const response = await this.groqClient.getGroqChatCompletion(promp);
+    const json = JSON.parse(response.choices[0].message.content);
+    console.log(json.tarea);
+    switch (json.tarea) {
+      case 'aceptaTerminosYCondiciones':
+        await this.personasRepository.updateAceptoTyC(persona.id, true);
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+      case 'noAceptaTerminosYCondiciones':
+        await this.personasRepository.deletePerson(persona.id);
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+      case 'dudasACeptandoTerminosYCondiciones':
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+      case 'sinSentidoPractico':
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+    }
+  }
+
+  async processMessageRegistro(cell, message, persona) {
+    const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
+    const promp = buildPrompRegistroUsuario(mensajeEnviado.content, message);
+    const response = await this.groqClient.getGroqChatCompletion(promp);
+    const json = JSON.parse(response.choices[0].message.content);
+    console.log(json.jsonData);
+    if (json.jsonData.nombre) {
+      await this.personasRepository.updateNombre(persona.id, json.jsonData.nombre);
+    }
+    if (json.jsonData.horarioLaboral) {
+      await this.personasRepository.updateHorarioLaboral(persona.id, json.jsonData.horarioLaboral);
+    }
+
+    switch (json.tarea) {
+      case 'registroUsuario':
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+      case 'registroUsuarioFinalizado':
+        await this.personasRepository.updateRegistrado(persona.id, true);
+        await this.sendPersonMessage({ cell, message: json.mensaje });
+        break;
+
+    }
+  }
+
+
+
+  async processMessageAgendarTurno(cell, message, persona) {
+
+    const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
+    const promp = buildPrompAgenda({ cell, mensajeUsuario: message, horarioUsuario: persona.horarioLaboral });
+
     const response = await this.groqClient.getGroqChatCompletion(promp);
 
     const json = JSON.parse(response.choices[0].message.content);
-    console.log(json.cell);
-    const persona = await this.personasRepository.findByCell(json.cell);
-    if (!persona) {
-      console.log('Persona no encontrada');
-      return;
-    }
     let rta;
     const tx = prisma.$transaction(async (tx) => {
       await Promise.all(
@@ -88,27 +127,22 @@ El mensaje del usuario:
           this.personasRepository.createSchedule(tx, persona.id, schedule)
         )
       );
-      rta = await this.sendPersonMessage({ cell: persona.whatsapp, message: json.message });
+      rta = await this.sendPersonMessage({ cell: persona.celular, message: json.message });
     });
-
-
-
     return rta;
+
   }
 
+  async sendFirstPersonMessage({ cell, message }) {
+    await this.personasRepository.createPerson(cell, null);
+    await this.messageRepository.createMessageLogByCelular({ celular: cell, content: message, sender: 'USER' });
+    const mensajeInicial = `
+Hola, bienvenido a Microfit.
+Para poder comenzar necesito que aceptes los terminos y condiciones.
 
-  async sendFirstPersonMessage({ cell }) {
-    const message = 'Hola, bienvenido a Microfit, ¿Quieres que te avisemos cuando sea hora de hacer ejercicio?';
-    await this.whatsAppClient.sendTextMessage({
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-      to: cell,
-      body: message,
-    });
-  }
-
-
-  async getPersonMessage({ cell, message }) {
-    console.log(cell, message);
+https://microfit.lat/terminos-y-condiciones
+      `;
+    return await this.baileysClient.sendMessage(cell, mensajeInicial);
   }
 
 }

@@ -21,10 +21,14 @@ model User {
 
 model Persona {
   id        Int      @id @default(autoincrement())
-  nombre    String
+  nombre    String?
   celular   String
   whatsapp  String?
   agendas   Agenda[]
+  horarioLaboral String?
+  aceptoTyC Boolean @default(false)
+  registrado Boolean @default(false)
+  messageLogs MessageLog[]
 
   createdAt DateTime @default(now())
 }
@@ -43,4 +47,22 @@ model Agenda {
 
   @@index([personaId])
   @@index([dayOfWeek, hour, minute])
+}
+
+enum MessageSender {
+  APP
+  USER
+}
+
+model MessageLog {
+  id        Int           @id @default(autoincrement())
+  personaId Int
+  content   String
+  sender    MessageSender
+  createdAt DateTime      @default(now())
+
+  persona   Persona       @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@index([personaId])
+  @@index([createdAt])
 }

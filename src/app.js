@@ -4,6 +4,7 @@ import { loggerMiddleware } from './middlewares/logger.middleware.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import apiRoutes from './routes/api.routes.js';
+import baileysRoutes from './routes/baileys.routes.js';
 
 export function createApp() {
     const app = express();
@@ -16,6 +17,7 @@ export function createApp() {
     app.use('/users', userRoutes);
     app.use('/auth', authRoutes);
     app.use('/api', apiRoutes);
+    app.use('/baileys', baileysRoutes);
 
     // Middleware de error
 

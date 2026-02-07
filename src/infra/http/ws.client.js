@@ -1,8 +1,16 @@
 import axios from 'axios';
+import { WsInterface } from '../../interfaces/wsInterface.js';
 import { env } from '../../config/env.js';
 
-export class WhatsAppClient {
+export class WhatsAppClient extends WsInterface {
+    static instance;
+
     constructor() {
+        super();
+        if (WhatsAppClient.instance) {
+            return WhatsAppClient.instance;
+        }
+        this.phoneNumberId = env.whatsappPhoneNumberId
         this.http = axios.create({
             baseURL: 'https://graph.facebook.com/v23.0',
             timeout: 5000,
@@ -13,9 +21,16 @@ export class WhatsAppClient {
         });
     }
 
-    async sendTextMessage({ phoneNumberId, to, body }) {
+    getInstance() {
+        if (!WhatsAppClient.instance) {
+            WhatsAppClient.instance = new WhatsAppClient();
+        }
+        return WhatsAppClient.instance;
+    }
+
+    async sendMessage({ to, body }) {
         const response = await this.http.post(
-            `/${phoneNumberId}/messages`,
+            `/${this.phoneNumberId}/messages`,
             {
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',
@@ -30,9 +45,9 @@ export class WhatsAppClient {
         return response.data;
     }
 
-    async sendTemplateMessage({ phoneNumberId, to, templateName, language }) {
+    async sendTemplateMessage({ to, templateName, language }) {
         const response = await this.http.post(
-            `/${phoneNumberId}/messages`,
+            `/${this.phoneNumberId}/messages`,
             {
                 messaging_product: 'whatsapp',
                 recipient_type: 'individual',

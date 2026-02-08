@@ -3,3 +3,4 @@ Docker
 .env
 .env.test
 /src/generated/prisma
+baileys_auth_info

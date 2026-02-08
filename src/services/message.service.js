@@ -3,10 +3,11 @@ import { BaileysClient } from '../infra/baileys/baileys.client.js';
 import { GroqClient } from '../infra/http/groq.client.js';
 import { PersonasRepository } from '../repositories/personas.repository.js';
 import { MessageRepository } from '../repositories/message.repository.js';
+import { AgendasRepository } from '../repositories/agendas.repository.js';
 import { buildPrompTerminosYCondiciones } from '../promps/buildPrompTerminosYCondiciones.js';
 import { buildPrompRegistroUsuario } from '../promps/buildPrompRegistroUsuario.js';
 import { PersonaService } from './persona.service.js';
-import { buildPrompAgenda } from '../promps/buildPrompAgenda.js';
+import { buildPrompAsistente } from '../promps/buildPrompAsistente.js';
 import { prisma } from '../config/prisma.js';
 
 export class MessageService {
@@ -17,6 +18,7 @@ export class MessageService {
     this.messageRepository = new MessageRepository();
     this.baileysClient = BaileysClient.getInstance();
     this.personaService = new PersonaService();
+    this.agendasRepository = new AgendasRepository();
   }
 
   async sendPersonMessage_old({ cell, message }) {
@@ -53,7 +55,7 @@ export class MessageService {
     }
 
     if (persona.registrado && persona.aceptoTyC) {
-      return this.processMessageAgendarTurno(cell, message, persona);
+      return this.processMessageAsistente(cell, message, persona);
     }
 
 
@@ -86,9 +88,13 @@ export class MessageService {
   }
 
   async processMessageRegistro(cell, message, persona) {
+    const personaData = { nombre: persona.nombre, horarioLaboral: persona.horarioLaboral };
     const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
-    const promp = buildPrompRegistroUsuario(mensajeEnviado.content, message);
+    const promp = buildPrompRegistroUsuario(mensajeEnviado.content, message, personaData);
     const response = await this.groqClient.getGroqChatCompletion(promp);
+
+
+
     const json = JSON.parse(response.choices[0].message.content);
     console.log(json.jsonData);
     if (json.jsonData.nombre) {
@@ -110,24 +116,33 @@ export class MessageService {
     }
   }
 
-
-
-  async processMessageAgendarTurno(cell, message, persona) {
-
+  async processMessageAsistente(cell, message, persona) {
     const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
-    const promp = buildPrompAgenda({ cell, mensajeUsuario: message, horarioUsuario: persona.horarioLaboral });
-
+    const promp = buildPrompAsistente({ mensajeEnviado: mensajeEnviado.content, mensajeUsuario: message, horarioLaboral: persona.horarioLaboral });
     const response = await this.groqClient.getGroqChatCompletion(promp);
-
     const json = JSON.parse(response.choices[0].message.content);
+    console.log(json.tarea);
+    switch (json.tarea) {
+      case 'agendarHorarios':
+        await this.generateAgenda(json.jsonData.schedule, persona);
+        break;
+      case 'responderDudas':
+        break;
+    }
+    await this.sendPersonMessage({ cell, message: json.mensaje });
+  }
+
+
+  async generateAgenda(schedule, persona) {
+
     let rta;
+    console.log(schedule);
     const tx = prisma.$transaction(async (tx) => {
       await Promise.all(
-        json.schedule.map(schedule =>
+        schedule.map(schedule =>
           this.personasRepository.createSchedule(tx, persona.id, schedule)
         )
       );
-      rta = await this.sendPersonMessage({ cell: persona.celular, message: json.message });
     });
     return rta;
 

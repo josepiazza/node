@@ -17,4 +17,24 @@ export class GroqClient {
             model: env.groqModel,
         });
     }
+
+    async getGroqChatCompletionSystem({ systemPrompt, contextPrompt, messages }) {
+        return this.groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: systemPrompt,
+                },
+                {
+                    role: "system",
+                    content: contextPrompt,
+                },
+                {
+                    role: "user",
+                    content: messages,
+                }
+            ],
+            model: env.groqModel,
+        });
+    }
 }

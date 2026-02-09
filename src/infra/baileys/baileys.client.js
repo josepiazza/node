@@ -83,18 +83,24 @@ export class BaileysClient extends WsInterface {
         const remoteJid = msg.key.remoteJidAlt;
         // Extract number (remove @s.whatsapp.net and device info if present)
         const number = remoteJid.split('@')[0].split(':')[0];
-
         const textMessage = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
-        console.log('------------------------------------------------');
-        console.log('New Message Received!');
-        console.log('From:', number);
-        console.log('Content:', msg.message?.conversation);
+        // if (msg.message?.audioMessage) {
+        //     console.log('Audio message received');
+        //     const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
+        //     const buffer = await downloadMediaMessage(msg, 'buffer', {});
+        //     const transcription = await this.messageService.transcribeAudio(buffer);
+        //     if (transcription) {
+        //         this.saveMessageLogByCelular({ celular: number, content: transcription, sender: 'USER' });
+        //         await this.messageService.processMessage(number, transcription);
+        //         return;
+        //     }
+
+        // }
 
         if (textMessage) {
             this.saveMessageLogByCelular({ celular: number, content: textMessage, sender: 'USER' });
             await this.messageService.processMessage(number, textMessage);
         }
-        console.log('------------------------------------------------');
     }
 
     async getQr() {

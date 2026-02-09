@@ -1,4 +1,5 @@
 import { WhatsAppClient } from '../infra/http/ws.client.js';
+import path from 'path';
 import { BaileysClient } from '../infra/baileys/baileys.client.js';
 import { GroqClient } from '../infra/http/groq.client.js';
 import { PersonasRepository } from '../repositories/personas.repository.js';
@@ -9,6 +10,9 @@ import { buildPrompRegistroUsuario } from '../promps/buildPrompRegistroUsuario.j
 import { PersonaService } from './persona.service.js';
 import { buildPrompAsistente } from '../promps/buildPrompAsistente.js';
 import { prisma } from '../config/prisma.js';
+import { buildSantaTablaPromp, buildSantaTablaContext } from '../promps/buildSantaTablaPromp.js';
+import Groq from "groq-sdk";
+import fs from "fs";
 
 export class MessageService {
   constructor() {
@@ -43,45 +47,20 @@ export class MessageService {
   }
 
   async processMessage(cell, message) {
-    const persona = await this.personasRepository.findByCell(cell);
-    if (!persona) { return this.sendFirstPersonMessage({ cell, message }); }
-
-    if (!persona.aceptoTyC) {
-      return this.processMessageTyC(cell, message, persona);
-    }
-
-    if (!persona.registrado) {
-      return this.processMessageRegistro(cell, message, persona);
-    }
-
-    if (persona.registrado && persona.aceptoTyC) {
-      return this.processMessageAsistente(cell, message, persona);
-    }
+    return this.processMessageTyC(cell, message);
 
 
 
   }
 
 
-  async processMessageTyC(cell, message, persona) {
-    const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
-    const promp = buildPrompTerminosYCondiciones(mensajeEnviado.content, message);
-    const response = await this.groqClient.getGroqChatCompletion(promp);
+  async processMessageTyC(cell, message) {
+    const response = await this.groqClient.getGroqChatCompletionSystem({ systemPrompt: buildSantaTablaPromp(), contextPrompt: buildSantaTablaContext(), messages: message });
     const json = JSON.parse(response.choices[0].message.content);
     console.log(json.tarea);
     switch (json.tarea) {
-      case 'aceptaTerminosYCondiciones':
-        await this.personasRepository.updateAceptoTyC(persona.id, true);
-        await this.sendPersonMessage({ cell, message: json.mensaje });
-        break;
-      case 'noAceptaTerminosYCondiciones':
-        await this.personasRepository.deletePerson(persona.id);
-        await this.sendPersonMessage({ cell, message: json.mensaje });
-        break;
-      case 'dudasACeptandoTerminosYCondiciones':
-        await this.sendPersonMessage({ cell, message: json.mensaje });
-        break;
-      case 'sinSentidoPractico':
+
+      default:
         await this.sendPersonMessage({ cell, message: json.mensaje });
         break;
     }
@@ -160,4 +139,27 @@ https://microfit.lat/terminos-y-condiciones
     return await this.baileysClient.sendMessage(cell, mensajeInicial);
   }
 
+
+  async transcribeAudio(buffer) {
+    const filePath = path.resolve('storage/audio.ogg');
+    try {
+      fs.writeFileSync(filePath, buffer);
+    } catch (e) {
+      console.log(e);
+    }
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const translation = await groq.audio.translations.create({
+      file: fs.createReadStream(filePath), // Required path to audio file - replace with your audio file!
+      model: "whisper-large-v3", // Required model to use for translation
+      prompt: "Specify context or spelling", // Optional
+      language: "en", // Optional ('en' only)
+      response_format: "json", // Optional
+      temperature: 0.0, // Optional
+    });
+    // Log the transcribed text
+    console.log(translation.text);
+    //fs.unlinkSync(filePath);
+    return translation.text;
+  }
 }

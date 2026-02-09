@@ -1,4 +1,4 @@
-export const buildPrompAsistente = ({ mensajeUsuario, mensajeEnviado, horarioLaboral }) => {
+export const buildPrompAsistente = ({ mensajeUsuario, mensajeEnviado, horarioLaboral, datosPersona }) => {
   return `
 Sos un asistente personal de entrenamiento deportivo que va a ayudar a entrenar a personas en su oficina en un MicroGym.
 Cada sesion de entrenamiento dura 15 minutos en los cuales van a realizar una serie de ejercicios.
@@ -74,7 +74,7 @@ El formato JSON que espero como respuesta es el siguite{
 	mensaje: $RespuestaAlUsuaior
 	jsonData: $jsonDataDeRespuesta
 }
-Horario laboral del usuario: "${horarioLaboral}" 
+Datos de la persona: "${datosPersona}" 
 Este es le mensaje que enviamos: "${mensajeEnviado}"
 Respuesta del usuario: "${mensajeUsuario}"
         `;

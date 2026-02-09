@@ -19,4 +19,17 @@ export class AgendasRepository {
             },
         });
     }
+
+    async findByPersonId(personId) {
+        return prisma.agenda.findMany({
+            where: {
+                personaId: personId,
+            },
+            orderBy: [
+                { dayOfWeek: 'asc' },
+                { hour: 'asc' },
+                { minute: 'asc' },
+            ],
+        });
+    }
 }

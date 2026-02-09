@@ -88,7 +88,7 @@ export class MessageService {
   }
 
   async processMessageRegistro(cell, message, persona) {
-    const personaData = { nombre: persona.nombre, horarioLaboral: persona.horarioLaboral };
+    const personaData = { nombre: persona.nombre, horarioLaboral: persona.horarioLaboral, alarmas: persona.agendas };
     const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
     const promp = buildPrompRegistroUsuario(mensajeEnviado.content, message, personaData);
     const response = await this.groqClient.getGroqChatCompletion(promp);
@@ -118,7 +118,8 @@ export class MessageService {
 
   async processMessageAsistente(cell, message, persona) {
     const mensajeEnviado = await this.messageRepository.finLastMessageLogByPersonaId(persona.id);
-    const promp = buildPrompAsistente({ mensajeEnviado: mensajeEnviado.content, mensajeUsuario: message, horarioLaboral: persona.horarioLaboral });
+    const promp = buildPrompAsistente({ mensajeEnviado: mensajeEnviado.content, mensajeUsuario: message, horarioLaboral: persona.horarioLaboral, datosPersona: await this.datosPersona(persona) });
+    console.log(promp);
     const response = await this.groqClient.getGroqChatCompletion(promp);
     const json = JSON.parse(response.choices[0].message.content);
     console.log(json.tarea);
@@ -146,6 +147,10 @@ export class MessageService {
     });
     return rta;
 
+  }
+
+  async datosPersona(persona) {
+    return JSON.stringify({ nombre: persona.nombre, horarioLaboral: persona.horarioLaboral, alarmas: await this.agendasRepository.findByPersonId(persona.id) });
   }
 
   async sendFirstPersonMessage({ cell, message }) {

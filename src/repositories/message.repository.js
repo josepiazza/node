@@ -36,4 +36,16 @@ export class MessageRepository {
             },
         });
     }
+
+    async findLastTenMessageLogByPersonaId(personaId) {
+        return await this.prisma.messageLog.findMany({
+            where: {
+                personaId,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+            take: 10,
+        });
+    }
 }

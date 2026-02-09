@@ -74,6 +74,7 @@ El formato JSON que espero como respuesta es el siguite{
 	mensaje: $RespuestaAlUsuaior
 	jsonData: $jsonDataDeRespuesta
 }
+
 Horario laboral del usuario: "${horarioLaboral}" 
 Este es le mensaje que enviamos: "${mensajeEnviado}"
 Respuesta del usuario: "${mensajeUsuario}"
